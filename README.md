@@ -10,6 +10,7 @@ A full-stack web application for coordinating Christmas gift-giving. Authenticat
 - **Authentication**: AWS Cognito
 - **Infrastructure**: Terraform
 - **Hosting**: Netlify (frontend), AWS (backend)
+- **Deployment**: Gitflow with `dev` (default) and `prod` branches
 
 ## Features
 
@@ -111,6 +112,8 @@ npm run build
 
 ### Infrastructure Deployment
 
+This project supports two environments: **development** and **production**, each with separate AWS resources.
+
 #### 1. Initialize Terraform
 
 ```bash
@@ -118,7 +121,9 @@ cd terraform
 terraform init
 ```
 
-#### 2. Deploy to Development
+#### 2. Deploy to Development Environment
+
+The development environment is deployed from the `dev` branch:
 
 ```bash
 # Review the plan
@@ -128,9 +133,15 @@ terraform plan -var-file="environments/dev.tfvars"
 terraform apply -var-file="environments/dev.tfvars"
 ```
 
-#### 3. Deploy to Production
+#### 3. Deploy to Production Environment
+
+The production environment is deployed from the `prod` branch:
 
 ```bash
+# Review the plan
+terraform plan -var-file="environments/prod.tfvars"
+
+# Apply the changes
 terraform apply -var-file="environments/prod.tfvars"
 ```
 
@@ -140,7 +151,7 @@ After deployment, Terraform will output:
 - API Gateway URL
 - Lambda function name
 
-Update your frontend `.env` file with these values.
+Update your frontend `.env` file with these values for local development, or configure them in the Netlify dashboard for each deployment context.
 
 ### Create Cognito Users
 
@@ -163,6 +174,30 @@ aws cognito-idp admin-create-user \
 
 ## Deployment
 
+This project uses a **gitflow deployment strategy** with separate dev and prod branches:
+
+- **dev** - Development environment (default branch)
+- **prod** - Production environment
+
+### Gitflow Workflow
+
+1. **Development**: All new features and fixes are developed on the `dev` branch or feature branches merged into `dev`
+2. **Staging**: The `dev` branch automatically deploys to the development environment
+3. **Production**: When ready for production, merge `dev` into `prod` to trigger production deployment
+
+### Automated Deployment (GitHub Actions)
+
+The project automatically deploys when you push to either `dev` or `prod` branches:
+
+- **Push to dev** → Deploys to development environment using `terraform/environments/dev.tfvars`
+- **Push to prod** → Deploys to production environment using `terraform/environments/prod.tfvars`
+
+The deployment workflow:
+1. Builds the backend Lambda functions
+2. Deploys AWS infrastructure via Terraform
+3. Builds the frontend with environment-specific configuration
+4. Deploys to Netlify (development or production context)
+
 ### Backend Deployment
 
 The backend is deployed automatically via Terraform when you run `terraform apply`. To update just the Lambda function:
@@ -172,28 +207,51 @@ cd backend
 npm run build
 
 cd ../terraform
+# For development
+terraform apply -var-file="environments/dev.tfvars" -target=aws_lambda_function.api_handler
+
+# For production
 terraform apply -var-file="environments/prod.tfvars" -target=aws_lambda_function.api_handler
 ```
 
 ### Frontend Deployment (Netlify)
 
-#### Option 1: Manual Deployment
+#### Option 1: Automatic Deployment (Recommended)
+
+Netlify is configured via `netlify.toml` to automatically deploy based on git branches:
+
+- **dev branch** → Development deployment
+- **prod branch** → Production deployment
+- **Pull requests** → Deploy previews
+- **Feature branches** → Branch deploys
+
+Configuration is in `netlify.toml` with separate contexts for dev and production.
+
+#### Option 2: Manual Deployment
 
 ```bash
 cd frontend
 npm run build
 
-# Deploy dist/ folder to Netlify
+# Deploy dist/ folder to Netlify CLI
+npx netlify deploy --prod  # for production
+npx netlify deploy         # for preview
 ```
 
-#### Option 2: Continuous Deployment
+#### Netlify Setup
 
 1. Connect your Git repository to Netlify
-2. Configure build settings:
-   - Build command: `cd frontend && npm install && npm run build`
+2. Set the default branch to **dev**
+3. Configure build settings (automatically read from netlify.toml):
+   - Build command: `npm install && npm run build`
    - Publish directory: `frontend/dist`
-3. Add environment variables in Netlify dashboard
-4. Netlify will auto-deploy on every push to main
+   - Base directory: `frontend`
+4. Add environment variables in Netlify dashboard:
+   - `VITE_API_URL`
+   - `VITE_COGNITO_USER_POOL_ID`
+   - `VITE_COGNITO_CLIENT_ID`
+   - `VITE_COGNITO_REGION`
+5. Netlify will auto-deploy on every push to dev or prod branches
 
 ## API Endpoints
 
@@ -319,10 +377,28 @@ Single-table design with the following access patterns:
 
 ## Contributing
 
-1. Create a feature branch
+This project follows a gitflow workflow:
+
+1. Create a feature branch from `dev`
+   ```bash
+   git checkout dev
+   git pull origin dev
+   git checkout -b feature/your-feature-name
+   ```
 2. Make your changes
 3. Run tests
-4. Submit a pull request
+   ```bash
+   cd frontend && npm test
+   cd ../backend && npm test
+   ```
+4. Commit and push your feature branch
+   ```bash
+   git add .
+   git commit -m "Description of changes"
+   git push origin feature/your-feature-name
+   ```
+5. Submit a pull request to merge into `dev`
+6. After review and testing in dev, create a PR from `dev` to `prod` for production release
 
 ## License
 
