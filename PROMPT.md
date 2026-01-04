@@ -52,13 +52,60 @@ interface Gift {
 ```
 
 ### DynamoDB Single Table Design
+
+**Table Structure**
 ```
-PK: LIST#<listId> | GIFT#<giftId>
-SK: METADATA | LIST#<listId>
+Table Name: gift-lists
+PK (Partition Key): String
+SK (Sort Key): String
+GSI1PK: String (Global Secondary Index 1)
+GSI1SK: String
+GSI2PK: String (Global Secondary Index 2)
+GSI2SK: String
+```
+
+**Item Patterns**
+
+List Item:
+```
+PK: LIST#<listId>
+SK: METADATA
 GSI1PK: OWNER#<ownerId>
 GSI1SK: CREATED#<timestamp>
 GSI2PK: SHARE#<shareCode>
+GSI2SK: CREATED#<timestamp>
+Attributes: title, hideClaimedGifts, createdAt, updatedAt, shareUrl, ownerId
 ```
+
+Gift Item:
+```
+PK: LIST#<listId>
+SK: GIFT#<giftId>
+GSI1PK: GIFT#<giftId>
+GSI1SK: LIST#<listId>
+Attributes: title, description, url, status, claimedBy, claimerMessage,
+            claimedAt, createdAt, updatedAt, sortOrder
+```
+
+**Access Patterns**
+
+| Pattern | Operation | Keys |
+|---------|-----------|------|
+| Get list by ID | Query | PK=LIST#<listId>, SK=METADATA |
+| Get all gifts for list | Query | PK=LIST#<listId>, SK begins_with GIFT# |
+| Get all lists for owner | Query GSI1 | GSI1PK=OWNER#<ownerId> |
+| Get list by share code | Query GSI2 | GSI2PK=SHARE#<shareCode> |
+| Get single gift | Query GSI1 | GSI1PK=GIFT#<giftId> |
+| Update gift sort order | UpdateItem | PK=LIST#<listId>, SK=GIFT#<giftId> |
+| Delete list with gifts | BatchWriteItem | Delete all items with PK=LIST#<listId> |
+
+**Capacity Planning**
+- Billing Mode: On-Demand (PAY_PER_REQUEST)
+- Expected read/write patterns:
+  - Reads: Mostly sporadic during holiday season
+  - Writes: Low volume (list/gift CRUD)
+  - Public endpoint reads: Potentially higher during gifter activity
+- Projected monthly cost: $1-5 for small family usage
 
 ## 4. Core Features
 
@@ -186,7 +233,214 @@ POST   /public/gifts/:giftId/claim     # Claim a gift
 4. Claimed gifts show: gifter name, message, timestamp
 5. Option to unclaim if needed
 
-## 8. Security Considerations
+## 8. Error Handling & Validation
+
+### 8.1 API Error Responses
+
+All API endpoints return consistent error format:
+```typescript
+interface ErrorResponse {
+  error: {
+    code: string;           // Machine-readable error code
+    message: string;        // Human-readable message
+    details?: any;          // Optional additional context
+    requestId: string;      // For debugging/support
+  }
+}
+```
+
+**HTTP Status Codes**
+- `200`: Success
+- `201`: Created
+- `204`: No Content (successful deletion)
+- `400`: Bad Request (validation errors)
+- `401`: Unauthorized (missing/invalid token)
+- `403`: Forbidden (insufficient permissions)
+- `404`: Not Found
+- `409`: Conflict (e.g., race condition on claim)
+- `429`: Too Many Requests (rate limit)
+- `500`: Internal Server Error
+
+**Common Error Codes**
+```typescript
+enum ErrorCode {
+  VALIDATION_ERROR = 'VALIDATION_ERROR',
+  UNAUTHORIZED = 'UNAUTHORIZED',
+  FORBIDDEN = 'FORBIDDEN',
+  NOT_FOUND = 'NOT_FOUND',
+  ALREADY_CLAIMED = 'ALREADY_CLAIMED',
+  GIFT_NOT_AVAILABLE = 'GIFT_NOT_AVAILABLE',
+  LIST_NOT_FOUND = 'LIST_NOT_FOUND',
+  INVALID_SHARE_CODE = 'INVALID_SHARE_CODE',
+  RATE_LIMIT_EXCEEDED = 'RATE_LIMIT_EXCEEDED',
+  INTERNAL_ERROR = 'INTERNAL_ERROR'
+}
+```
+
+### 8.2 Input Validation Rules
+
+**List Validation**
+- `title`: 1-100 characters, required
+- `hideClaimedGifts`: boolean, required
+
+**Gift Validation**
+- `title`: 1-200 characters, required
+- `description`: 0-2000 characters, optional
+- `url`: Valid HTTP(S) URL, max 2000 characters, optional
+- `sortOrder`: Positive integer
+
+**Claim Validation**
+- `claimedBy`: 1-100 characters, required, no special characters
+- `claimerMessage`: 0-500 characters, optional
+
+### 8.3 Race Condition Handling
+
+**Gift Claiming**
+Uses DynamoDB conditional writes to prevent double-claims:
+```typescript
+// UpdateItem with condition expression
+ConditionExpression: "attribute_not_exists(claimedBy) AND #status = :available"
+// If condition fails, return 409 Conflict
+```
+
+**Optimistic Locking for Updates**
+Use `updatedAt` timestamp for version checking:
+```typescript
+ConditionExpression: "updatedAt = :expectedVersion"
+```
+
+### 8.4 Frontend Error Handling
+
+**Error Boundaries**
+- Top-level error boundary catches React crashes
+- Graceful fallback UI with retry option
+- Automatic error logging to CloudWatch (via API)
+
+**Toast Notifications**
+- Success: Green toast with confirmation
+- Error: Red toast with user-friendly message
+- Warning: Yellow toast for conflicts/validation
+
+**Form Validation**
+- Client-side validation with React Hook Form + Zod
+- Real-time field validation on blur
+- Server errors mapped to form fields
+
+## 9. UI/UX Design Patterns
+
+### 9.1 Design System
+
+**Color Palette**
+```css
+/* Primary - Christmas theme */
+--color-primary: #165B33;      /* Forest green */
+--color-secondary: #BB2528;    /* Christmas red */
+--color-accent: #F8B229;       /* Gold */
+
+/* Neutrals */
+--color-background: #FAFAFA;
+--color-surface: #FFFFFF;
+--color-text-primary: #212121;
+--color-text-secondary: #757575;
+--color-border: #E0E0E0;
+
+/* Status */
+--color-success: #4CAF50;
+--color-error: #F44336;
+--color-warning: #FF9800;
+--color-info: #2196F3;
+```
+
+**Typography**
+- Font family: Inter or system fonts
+- Headings: 24px/32px/40px (bold)
+- Body: 16px (regular/medium)
+- Small: 14px
+- Line height: 1.5
+
+**Spacing Scale**
+- 4px, 8px, 12px, 16px, 24px, 32px, 48px, 64px
+
+### 9.2 Component Patterns
+
+**Button Variants**
+- Primary: Solid background, white text (main actions)
+- Secondary: Outline, transparent background (cancel)
+- Ghost: No border, text only (tertiary actions)
+- Danger: Red background (delete/unclaim)
+
+**Card Component**
+- Border radius: 8px
+- Shadow: subtle elevation
+- Padding: 16px/24px
+- Hover state: slight elevation increase
+
+**Modal/Dialog**
+- Center screen overlay
+- Max width: 600px
+- Backdrop: semi-transparent black
+- Close on ESC key or backdrop click
+- Focus trap inside modal
+
+### 9.3 Responsive Design
+
+**Breakpoints**
+```css
+sm: 640px   /* Mobile landscape */
+md: 768px   /* Tablet */
+lg: 1024px  /* Desktop */
+xl: 1280px  /* Large desktop */
+```
+
+**Mobile-First Approach**
+- Stack elements vertically on mobile
+- Horizontal layouts on tablet+
+- Touch-friendly targets (min 44px)
+- Simplified navigation on mobile
+
+### 9.4 Accessibility (WCAG 2.1 AA)
+
+**Keyboard Navigation**
+- All interactive elements focusable
+- Visible focus indicators
+- Logical tab order
+- Keyboard shortcuts for common actions
+
+**Screen Reader Support**
+- Semantic HTML elements
+- ARIA labels for icons/buttons
+- Live regions for dynamic updates (claims)
+- Descriptive alt text for images
+
+**Color Contrast**
+- Text: minimum 4.5:1 contrast ratio
+- Large text: 3:1
+- Interactive elements: 3:1
+
+**Form Accessibility**
+- Labels associated with inputs
+- Error messages announced
+- Required fields indicated
+- Help text for complex fields
+
+### 9.5 Loading States
+
+**Skeleton Screens**
+- Show content structure while loading
+- Animated pulse effect
+- Match final content layout
+
+**Spinners**
+- Button loading: inline spinner + disabled state
+- Page loading: centered spinner
+- Minimum display time: 300ms (avoid flashing)
+
+**Optimistic Updates**
+- Gift claim: immediate UI update
+- Rollback on error with toast notification
+- List/gift edits: instant feedback
+
+## 10. Security Considerations
 
 ### Authentication
 - Cognito JWT tokens for lister endpoints
@@ -202,7 +456,45 @@ POST   /public/gifts/:giftId/claim     # Claim a gift
 - Server-side validation on all inputs
 - URL validation for gift URLs
 - XSS protection via React's built-in escaping
-- Rate limiting on claim endpoint to prevent abuse
+- SQL injection: N/A (NoSQL database)
+- Path traversal: Input sanitization on all IDs
+
+### Rate Limiting
+
+**API Gateway Throttling**
+- Authenticated endpoints: 100 requests/second per user
+- Public endpoints: 50 requests/second per IP
+- Burst: 200 requests
+
+**Application-Level Rate Limiting**
+- Gift claim endpoint: 5 claims per minute per IP
+- Implementation: DynamoDB with TTL for rate limit tracking
+- Response: 429 status with Retry-After header
+
+**DDoS Protection**
+- AWS Shield Standard (included)
+- CloudFront for caching and protection
+- WAF rules for common attack patterns (optional)
+
+### Security Headers
+
+```typescript
+// Lambda response headers
+{
+  'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
+  'X-Content-Type-Options': 'nosniff',
+  'X-Frame-Options': 'DENY',
+  'X-XSS-Protection': '1; mode=block',
+  'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'",
+  'Referrer-Policy': 'strict-origin-when-cross-origin'
+}
+```
+
+### Secrets Management
+- Cognito secrets: AWS Secrets Manager
+- Environment variables: Lambda environment (encrypted at rest)
+- API keys: Never in client code
+- Rotation policy: Annual or on suspicion of compromise
 
 ## 9. Infrastructure Architecture
 
@@ -264,7 +556,343 @@ jobs:
     # build React app, deploy to Netlify
 ```
 
-## 10. Configuration
+## 10. Performance Considerations
+
+### 10.1 Frontend Optimization
+
+**Code Splitting**
+```typescript
+// Route-based code splitting
+const Dashboard = lazy(() => import('./components/lister/Dashboard'));
+const PublicListView = lazy(() => import('./components/gifter/PublicListView'));
+```
+
+**Bundle Size**
+- Target: < 200KB initial bundle (gzipped)
+- Tree shaking: Remove unused code
+- Dynamic imports for heavy libraries
+- Analyze with `vite-bundle-visualizer`
+
+**Caching Strategy**
+```typescript
+// Service Worker (optional)
+- Cache static assets (JS, CSS, images)
+- Network-first for API calls
+- Offline fallback page
+
+// Browser caching headers
+- Immutable assets: cache-control: public, max-age=31536000, immutable
+- HTML: cache-control: no-cache
+```
+
+**React Query Configuration**
+```typescript
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 30000,        // 30 seconds
+      cacheTime: 300000,       // 5 minutes
+      refetchOnWindowFocus: false,
+      retry: 1
+    }
+  }
+});
+```
+
+**Image Optimization**
+- Lazy load images below fold
+- Responsive images with srcset
+- WebP format with fallbacks
+- Compress images (TinyPNG)
+
+### 10.2 Backend Optimization
+
+**Lambda Performance**
+```typescript
+// Cold start optimization
+- Provisioned concurrency: Optional for critical endpoints
+- Memory: 512MB-1024MB (balance cost vs performance)
+- Handler optimization: Reuse connections, minimize imports
+
+// Connection pooling
+const dynamoDb = new DynamoDB.DocumentClient({
+  maxRetries: 2,
+  httpOptions: { timeout: 5000 }
+});
+```
+
+**DynamoDB Optimization**
+- Single-table design reduces round trips
+- Batch operations for bulk reads/writes
+- Use query over scan (always)
+- Project only needed attributes
+- Consider DAX for high-read scenarios (likely overkill for this app)
+
+**API Gateway Caching**
+```hcl
+# Optional: Cache public list/gift GET requests
+cache_cluster_enabled = true
+cache_cluster_size = "0.5"  # Smallest size
+cache_ttl_seconds = 300     # 5 minutes
+cache_key_parameters = ["path", "querystring"]
+```
+
+### 10.3 Performance Targets
+
+| Metric | Target | Measurement |
+|--------|--------|-------------|
+| Time to Interactive (TTI) | < 3s | Lighthouse |
+| First Contentful Paint (FCP) | < 1.5s | Lighthouse |
+| API Response Time (p95) | < 500ms | CloudWatch |
+| Lambda Cold Start | < 2s | CloudWatch |
+| DynamoDB Latency | < 50ms | X-Ray |
+| Lighthouse Score | > 90 | CI/CD check |
+
+## 11. Monitoring & Observability
+
+### 11.1 CloudWatch Metrics
+
+**Lambda Metrics**
+- Invocations, Errors, Throttles
+- Duration (avg, p50, p95, p99, max)
+- Concurrent executions
+- Cold start count (custom metric)
+
+**API Gateway Metrics**
+- Request count by endpoint
+- 4xx/5xx error rates
+- Integration latency
+- Cache hit/miss ratio
+
+**DynamoDB Metrics**
+- Read/write capacity consumed
+- Throttled requests
+- System errors
+- Conditional check failures (claim conflicts)
+
+**Custom Application Metrics**
+```typescript
+// CloudWatch Embedded Metrics Format
+const metrics = {
+  _aws: {
+    Timestamp: Date.now(),
+    CloudWatchMetrics: [{
+      Namespace: 'GiftList',
+      Dimensions: [['Environment', 'Operation']],
+      Metrics: [{ Name: 'ClaimSuccess', Unit: 'Count' }]
+    }]
+  },
+  Environment: 'prod',
+  Operation: 'claim-gift',
+  ClaimSuccess: 1
+};
+console.log(JSON.stringify(metrics));
+```
+
+### 11.2 Logging Strategy
+
+**Log Levels**
+- ERROR: Failures, exceptions (alert)
+- WARN: Recoverable issues, validation failures
+- INFO: Key operations (claim, create, delete)
+- DEBUG: Detailed flow (dev only)
+
+**Structured Logging**
+```typescript
+logger.info('Gift claimed', {
+  giftId: gift.id,
+  listId: gift.listId,
+  claimedBy: gift.claimedBy,
+  timestamp: new Date().toISOString(),
+  requestId: context.requestId
+});
+```
+
+**Log Retention**
+- Production: 90 days
+- Development: 7 days
+- Cost optimization: Archive to S3 after 30 days
+
+### 11.3 Distributed Tracing
+
+**AWS X-Ray**
+```typescript
+// Enable X-Ray for Lambda and API Gateway
+const AWSXRay = require('aws-xray-sdk-core');
+const AWS = AWSXRay.captureAWS(require('aws-sdk'));
+
+// Trace segments
+const segment = AWSXRay.getSegment();
+const subsegment = segment.addNewSubsegment('DynamoDB-Query');
+// ... perform query ...
+subsegment.close();
+```
+
+**Trace key operations:**
+- Full claim flow (public API → Lambda → DynamoDB)
+- List creation with gifts
+- Dashboard load (multiple DynamoDB queries)
+
+### 11.4 Alerting & Monitoring
+
+**CloudWatch Alarms**
+
+Critical (PagerDuty/Email):
+- Lambda error rate > 5% (5 min window)
+- API Gateway 5xx rate > 1% (5 min window)
+- DynamoDB throttling events
+- Lambda concurrent execution > 80% limit
+
+Warning (Slack/Email):
+- API Gateway 4xx rate > 10%
+- Lambda duration p95 > 1s
+- Claim conflicts > 10/hour
+
+**Health Check**
+```
+GET /health
+Response: { status: 'ok', timestamp: '...', version: '1.0.0' }
+```
+
+**Monitoring Dashboard**
+- CloudWatch Dashboard with key metrics
+- Real-time updates during peak usage (Dec)
+- Historical trends (week/month views)
+
+## 12. Cost Estimation
+
+### 12.1 AWS Cost Breakdown (Monthly)
+
+**Assumptions**
+- 5 active listers
+- 10 lists total
+- 100 gifts across all lists
+- 50 gifters accessing lists
+- 200 gift claims in December
+- 1000 API requests/day (peak: 5000/day in Dec)
+
+**Service Costs**
+
+| Service | Usage | Cost/Month |
+|---------|-------|------------|
+| **DynamoDB** | | |
+| - On-demand reads | ~30K reads/month | $0.04 |
+| - On-demand writes | ~6K writes/month | $0.08 |
+| - Storage (< 1GB) | 0.1 GB | $0.03 |
+| **Lambda** | | |
+| - Invocations | 30K/month (150K in Dec) | $0.01-$0.03 |
+| - Duration (512MB, 200ms avg) | 1.67 GB-hrs | $0.03 |
+| **API Gateway** | | |
+| - REST API requests | 30K/month | $0.10 |
+| **Cognito** | | |
+| - MAU (< 50,000) | 5 users | Free |
+| **CloudWatch** | | |
+| - Logs (1GB/month) | 1GB | $0.50 |
+| - Metrics (10 custom) | 10 metrics | $3.00 |
+| - Alarms (5) | 5 alarms | $0.50 |
+| **Secrets Manager** (optional) | 1 secret | $0.40 |
+| **Total (Normal)** | | **~$4.69** |
+| **Total (Dec Peak)** | | **~$8-12** |
+
+**Netlify (Frontend Hosting)**
+- Free tier: 100GB bandwidth, 300 build minutes
+- Expected: Well within limits
+- Cost: **$0**
+
+**GitHub Actions (CI/CD)**
+- Free tier: 2000 minutes/month for private repos
+- Expected: ~200 minutes/month
+- Cost: **$0**
+
+**Total Monthly Cost: $5-12**
+**Annual Cost: ~$60-100**
+
+### 12.2 Cost Optimization Strategies
+
+1. **DynamoDB**: On-demand is cost-effective for this usage pattern
+2. **Lambda**: Right-size memory (test 256MB vs 512MB vs 1024MB)
+3. **CloudWatch Logs**: Reduce retention in dev, filter noisy logs
+4. **API Gateway Caching**: Only if high read volume justifies it
+5. **Reserved Capacity**: Not needed at this scale
+
+### 12.3 Scaling Projections
+
+**10x Growth (50 listers, 1000 gifts, 500 gifters)**
+- DynamoDB: ~$2-3/month
+- Lambda: ~$1-2/month
+- API Gateway: ~$1/month
+- CloudWatch: ~$5-8/month
+- **Total: $25-35/month**
+
+Still well within serverless cost efficiency.
+
+## 13. Backup & Disaster Recovery
+
+### 13.1 Backup Strategy
+
+**DynamoDB Backups**
+```hcl
+# Point-in-time recovery (PITR)
+resource "aws_dynamodb_table" "gift_lists" {
+  point_in_time_recovery {
+    enabled = true
+  }
+}
+```
+
+- PITR: Continuous backups, restore to any point in last 35 days
+- On-demand backups: Before major changes/deployments
+- Cross-region backup: Optional (overkill for this app)
+- Cost: $0.20/GB/month for PITR
+
+**Backup Schedule**
+- Automated daily backups via AWS Backup (optional)
+- Retention: 30 days
+- Trigger: Lambda post-deployment (create snapshot)
+
+### 13.2 Disaster Recovery Plan
+
+**RTO (Recovery Time Objective): 4 hours**
+**RPO (Recovery Point Objective): 1 minute** (via PITR)
+
+**Failure Scenarios**
+
+1. **DynamoDB Table Corruption**
+   - Restore from PITR to new table
+   - Update Lambda environment variables
+   - Redeploy API Gateway
+   - Estimated time: 30 minutes
+
+2. **Lambda Code Bug (Production)**
+   - Rollback to previous version (Lambda versioning)
+   - Revert Git commit
+   - Redeploy via CI/CD
+   - Estimated time: 10 minutes
+
+3. **Region Outage (us-east-1)**
+   - Manual failover to standby region (if implemented)
+   - Update DNS/Netlify config
+   - Restore DynamoDB from backup to new region
+   - Estimated time: 2-4 hours
+   - **Recommendation**: Not needed for this use case
+
+4. **Complete Data Loss**
+   - Restore from last PITR backup
+   - Data loss: Maximum 1 minute of transactions
+   - Notify users of potential claim conflicts
+   - Estimated time: 1 hour
+
+### 13.3 Testing DR Procedures
+
+**Quarterly DR Drill**
+1. Create test DynamoDB table
+2. Restore from production backup
+3. Verify data integrity
+4. Test Lambda connection to restored table
+5. Document any issues
+6. Time the recovery process
+
+## 14. Configuration
 
 ### Lister User Management
 ```typescript
@@ -292,7 +920,257 @@ AWS_REGION=
 CORS_ORIGIN=https://app.example.com
 ```
 
-## 11. Project Structure
+## 15. API Request/Response Examples
+
+### 15.1 Lister Endpoints
+
+**Create List**
+```http
+POST /lists
+Authorization: Bearer <cognito-jwt-token>
+Content-Type: application/json
+
+{
+  "title": "Emma's Christmas 2024",
+  "hideClaimedGifts": true
+}
+
+Response: 201 Created
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "ownerId": "cognito-user-id-123",
+  "title": "Emma's Christmas 2024",
+  "hideClaimedGifts": true,
+  "shareUrl": "/gift-list/abc123xyz789",
+  "createdAt": "2024-11-01T10:00:00.000Z",
+  "updatedAt": "2024-11-01T10:00:00.000Z"
+}
+```
+
+**Get All Lists for User**
+```http
+GET /lists
+Authorization: Bearer <cognito-jwt-token>
+
+Response: 200 OK
+{
+  "lists": [
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440000",
+      "title": "Emma's Christmas 2024",
+      "hideClaimedGifts": true,
+      "shareUrl": "/gift-list/abc123xyz789",
+      "giftCount": 15,
+      "claimedCount": 7,
+      "createdAt": "2024-11-01T10:00:00.000Z",
+      "updatedAt": "2024-12-15T14:30:00.000Z"
+    }
+  ]
+}
+```
+
+**Create Gift**
+```http
+POST /lists/550e8400-e29b-41d4-a716-446655440000/gifts
+Authorization: Bearer <cognito-jwt-token>
+Content-Type: application/json
+
+{
+  "title": "LEGO Star Wars Millennium Falcon",
+  "description": "The ultimate LEGO set for Star Wars fans. 7541 pieces!",
+  "url": "https://www.lego.com/en-us/product/millennium-falcon-75192",
+  "sortOrder": 1
+}
+
+Response: 201 Created
+{
+  "id": "660f9511-f39c-52e5-b827-557766551111",
+  "listId": "550e8400-e29b-41d4-a716-446655440000",
+  "title": "LEGO Star Wars Millennium Falcon",
+  "description": "The ultimate LEGO set for Star Wars fans. 7541 pieces!",
+  "url": "https://www.lego.com/en-us/product/millennium-falcon-75192",
+  "status": "available",
+  "sortOrder": 1,
+  "createdAt": "2024-11-01T10:05:00.000Z",
+  "updatedAt": "2024-11-01T10:05:00.000Z"
+}
+```
+
+**Get Gifts for List (Lister View)**
+```http
+GET /lists/550e8400-e29b-41d4-a716-446655440000/gifts
+Authorization: Bearer <cognito-jwt-token>
+
+Response: 200 OK
+{
+  "gifts": [
+    {
+      "id": "660f9511-f39c-52e5-b827-557766551111",
+      "listId": "550e8400-e29b-41d4-a716-446655440000",
+      "title": "LEGO Star Wars Millennium Falcon",
+      "description": "The ultimate LEGO set...",
+      "url": "https://www.lego.com/...",
+      "status": "claimed",
+      "claimedBy": "Uncle Dave",
+      "claimerMessage": "Can't wait to build this together!",
+      "claimedAt": "2024-12-10T08:30:00.000Z",
+      "sortOrder": 1,
+      "createdAt": "2024-11-01T10:05:00.000Z",
+      "updatedAt": "2024-12-10T08:30:00.000Z"
+    },
+    {
+      "id": "770f9522-f49d-63f6-c938-668877662222",
+      "listId": "550e8400-e29b-41d4-a716-446655440000",
+      "title": "Wireless Headphones",
+      "description": "Noise cancelling, Bluetooth 5.0",
+      "status": "available",
+      "sortOrder": 2,
+      "createdAt": "2024-11-01T10:10:00.000Z",
+      "updatedAt": "2024-11-01T10:10:00.000Z"
+    }
+  ]
+}
+```
+
+**Unclaim Gift**
+```http
+POST /gifts/660f9511-f39c-52e5-b827-557766551111/unclaim
+Authorization: Bearer <cognito-jwt-token>
+
+Response: 200 OK
+{
+  "id": "660f9511-f39c-52e5-b827-557766551111",
+  "status": "available",
+  "claimedBy": null,
+  "claimerMessage": null,
+  "claimedAt": null,
+  "updatedAt": "2024-12-16T11:00:00.000Z"
+}
+```
+
+### 15.2 Gifter (Public) Endpoints
+
+**Get List by Share Code**
+```http
+GET /public/lists/abc123xyz789
+
+Response: 200 OK
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "title": "Emma's Christmas 2024",
+  "hideClaimedGifts": true
+}
+```
+
+**Get Gifts (Gifter View)**
+```http
+GET /public/lists/abc123xyz789/gifts
+
+Response: 200 OK
+{
+  "gifts": [
+    {
+      "id": "770f9522-f49d-63f6-c938-668877662222",
+      "title": "Wireless Headphones",
+      "description": "Noise cancelling, Bluetooth 5.0",
+      "url": "https://example.com/headphones",
+      "status": "available"
+      // Note: No sortOrder, claimedBy, or claimerMessage exposed
+    }
+    // Claimed gifts hidden if hideClaimedGifts=true
+    // Or shown with status="claimed" if hideClaimedGifts=false
+  ]
+}
+```
+
+**Claim Gift**
+```http
+POST /public/gifts/770f9522-f49d-63f6-c938-668877662222/claim
+Content-Type: application/json
+
+{
+  "claimedBy": "Aunt Sarah",
+  "claimerMessage": "Perfect! She'll love these."
+}
+
+Response: 200 OK
+{
+  "id": "770f9522-f49d-63f6-c938-668877662222",
+  "status": "claimed",
+  "claimedAt": "2024-12-16T12:00:00.000Z"
+}
+
+// Error Response (already claimed)
+Response: 409 Conflict
+{
+  "error": {
+    "code": "ALREADY_CLAIMED",
+    "message": "This gift has already been claimed",
+    "requestId": "req-123-456"
+  }
+}
+```
+
+### 15.3 Error Response Examples
+
+**Validation Error**
+```http
+POST /lists
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "title": "",  // Invalid: empty title
+  "hideClaimedGifts": "yes"  // Invalid: not boolean
+}
+
+Response: 400 Bad Request
+{
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "Validation failed",
+    "details": {
+      "title": "Title must be between 1 and 100 characters",
+      "hideClaimedGifts": "Must be a boolean value"
+    },
+    "requestId": "req-789-012"
+  }
+}
+```
+
+**Authorization Error**
+```http
+GET /lists/550e8400-e29b-41d4-a716-446655440000
+Authorization: Bearer <token-for-different-user>
+
+Response: 403 Forbidden
+{
+  "error": {
+    "code": "FORBIDDEN",
+    "message": "You do not have permission to access this resource",
+    "requestId": "req-345-678"
+  }
+}
+```
+
+**Rate Limit Error**
+```http
+POST /public/gifts/770f9522-f49d-63f6-c938-668877662222/claim
+
+Response: 429 Too Many Requests
+{
+  "error": {
+    "code": "RATE_LIMIT_EXCEEDED",
+    "message": "Too many claim attempts. Please try again later.",
+    "requestId": "req-901-234"
+  },
+  "headers": {
+    "Retry-After": "60"  // Seconds
+  }
+}
+```
+
+## 16. Project Structure
 
 ```
 gift-list-app/
@@ -366,7 +1244,7 @@ gift-list-app/
 └── README.md
 ```
 
-## 12. Development Workflow
+## 17. Development Workflow
 
 ### Initial Setup
 1. Clone repository
@@ -386,7 +1264,7 @@ gift-list-app/
 5. Create PR → review
 6. Merge to main → triggers CD (deploys to prod)
 
-## 13. Testing Strategy
+## 18. Testing Strategy
 
 ### Frontend
 - Unit tests: React Testing Library + Vitest
@@ -403,7 +1281,7 @@ gift-list-app/
 - Playwright for critical user journeys
 - Run against staging environment
 
-## 14. Future Enhancements (Out of Scope)
+## 19. Future Enhancements (Out of Scope)
 
 - Email notifications on claims
 - Multi-language support
@@ -415,7 +1293,7 @@ gift-list-app/
 - Gift suggestions based on age/interests
 - Export list to PDF/email
 
-## 15. Success Criteria
+## 20. Success Criteria
 
 - Listers can create and manage lists in <2 minutes
 - Gifters can claim gifts without any authentication friction
@@ -425,7 +1303,7 @@ gift-list-app/
 - All data stored securely
 - GDPR-compliant (no PII stored for gifters beyond what they provide)
 
-## 16. Deployment Checklist
+## 21. Deployment Checklist
 
 ### Pre-Launch
 - [ ] Terraform infrastructure deployed
