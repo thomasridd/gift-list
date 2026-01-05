@@ -2,7 +2,9 @@ name: Deploy
 
 on:
   push:
-    branches: [main]
+    branches:
+      - dev      # Development branch
+      - prod     # Production branch
 
 env:
   AWS_REGION: us-east-1
@@ -16,6 +18,7 @@ jobs:
       api_url: ${{ steps.terraform-output.outputs.api_url }}
       cognito_pool_id: ${{ steps.terraform-output.outputs.cognito_pool_id }}
       cognito_client_id: ${{ steps.terraform-output.outputs.cognito_client_id }}
+      netlify_production: ${{ steps.set-env.outputs.NETLIFY_PRODUCTION }}
 
     steps:
       - uses: actions/checkout@v4
@@ -47,9 +50,20 @@ jobs:
         working-directory: ./terraform
         run: terraform init
 
+      - name: Set Environment
+        id: set-env
+        run: |
+          if [[ "${{ github.ref }}" == "refs/heads/prod" ]]; then
+            echo "ENV_FILE=prod.tfvars" >> $GITHUB_OUTPUT
+            echo "NETLIFY_PRODUCTION=true" >> $GITHUB_OUTPUT
+          else
+            echo "ENV_FILE=dev.tfvars" >> $GITHUB_OUTPUT
+            echo "NETLIFY_PRODUCTION=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Terraform Plan
         working-directory: ./terraform
-        run: terraform plan -var-file="environments/prod.tfvars" -out=tfplan
+        run: terraform plan -var-file="environments/${{ steps.set-env.outputs.ENV_FILE }}" -out=tfplan
 
       - name: Terraform Apply
         working-directory: ./terraform
@@ -95,9 +109,9 @@ jobs:
         uses: nwtgck/actions-netlify@v2.1
         with:
           publish-dir: './frontend/dist'
-          production-deploy: true
+          production-deploy: ${{ needs.deploy-infrastructure.outputs.netlify_production }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          deploy-message: "Deploy from GitHub Actions"
+          deploy-message: "Deploy from GitHub Actions - ${{ github.ref_name }}"
         env:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
           NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}

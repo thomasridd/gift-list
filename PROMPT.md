@@ -170,6 +170,7 @@ Attributes: title, description, url, status, claimedBy, claimerMessage,
 ### Infrastructure & DevOps
 - **IaC**: Terraform
 - **CI/CD**: GitHub Actions
+- **Deployment Strategy**: Gitflow with `dev` (default branch) and `prod` branches
 - **Secrets**: AWS Secrets Manager / GitHub Secrets
 - **Environments**: dev, prod
 
@@ -546,14 +547,16 @@ jobs:
 name: Deploy
 on:
   push:
-    branches: [main]
+    branches:
+      - dev      # Development environment
+      - prod     # Production environment
 jobs:
   deploy-infrastructure:
-    # terraform apply
+    # terraform apply with environment-specific tfvars (dev.tfvars or prod.tfvars)
   deploy-backend:
     # build lambda, upload to S3, update function
   deploy-frontend:
-    # build React app, deploy to Netlify
+    # build React app, deploy to Netlify (development or production context)
 ```
 
 ## 10. Performance Considerations
@@ -1256,13 +1259,21 @@ gift-list-app/
 7. Set environment variables
 8. Run local dev: `npm run dev` (frontend) and SAM local for backend testing
 
-### Feature Development
-1. Create feature branch
+### Feature Development (Gitflow)
+1. Create feature branch from `dev`
+   ```bash
+   git checkout dev
+   git pull origin dev
+   git checkout -b feature/new-feature
+   ```
 2. Develop locally
 3. Write tests
 4. Push → triggers CI (tests + terraform plan)
-5. Create PR → review
-6. Merge to main → triggers CD (deploys to prod)
+5. Create PR to merge into `dev` → review
+6. Merge to `dev` → triggers CD (deploys to development environment)
+7. Test in development environment
+8. When ready for production, create PR from `dev` to `prod`
+9. Merge to `prod` → triggers CD (deploys to production environment)
 
 ## 18. Testing Strategy
 
