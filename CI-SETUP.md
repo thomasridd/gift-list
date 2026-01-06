@@ -188,11 +188,232 @@ gh repo edit --default-branch dev
 
 ## Step 5: Deploy Infrastructure with Terraform
 
+### 5.0 Configure Terraform Remote State Backend (Recommended)
+
+For production use and CI/CD pipelines, it's highly recommended to store Terraform state in a remote backend (S3) rather than locally. This enables:
+- **Team collaboration**: Multiple people can work with the same state
+- **CI/CD integration**: GitHub Actions can access and update state
+- **State locking**: Prevents concurrent modifications (via DynamoDB)
+- **State history**: S3 versioning allows recovery of previous states
+- **Security**: Encryption at rest and in transit
+
+#### 5.0.1 Create S3 Bucket for Terraform State
+
+**Option A: Using AWS Console**
+
+1. Log in to AWS Console
+2. Navigate to **S3** → **Create bucket**
+3. Bucket settings:
+   - **Bucket name**: `gift-list-terraform-state-<your-unique-id>`
+     - Must be globally unique (e.g., `gift-list-terraform-state-12345`)
+   - **Region**: `us-east-1` (match your Terraform region)
+   - **Block all public access**: ✓ Checked (IMPORTANT for security)
+4. Click **Create bucket**
+5. Select the bucket → **Properties** tab
+6. **Bucket Versioning**: Click **Edit** → **Enable** → **Save changes**
+7. **Default encryption**: Click **Edit** → **Server-side encryption**
+   - Encryption type: **SSE-S3** (or **SSE-KMS** for additional security)
+   - Click **Save changes**
+
+**Option B: Using AWS CLI**
+
+```bash
+# Set variables
+BUCKET_NAME="gift-list-terraform-state-$(date +%s)"  # Adds timestamp for uniqueness
+AWS_REGION="us-east-1"
+
+# Create bucket
+aws s3api create-bucket \
+  --bucket $BUCKET_NAME \
+  --region $AWS_REGION \
+  --profile gift-list
+
+# Enable versioning
+aws s3api put-bucket-versioning \
+  --bucket $BUCKET_NAME \
+  --versioning-configuration Status=Enabled \
+  --profile gift-list
+
+# Enable encryption
+aws s3api put-bucket-encryption \
+  --bucket $BUCKET_NAME \
+  --server-side-encryption-configuration '{
+    "Rules": [{
+      "ApplyServerSideEncryptionByDefault": {
+        "SSEAlgorithm": "AES256"
+      }
+    }]
+  }' \
+  --profile gift-list
+
+# Block public access (security best practice)
+aws s3api put-public-access-block \
+  --bucket $BUCKET_NAME \
+  --public-access-block-configuration \
+    "BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true" \
+  --profile gift-list
+
+echo "Bucket created: $BUCKET_NAME"
+echo "Save this bucket name for Terraform configuration!"
+```
+
+#### 5.0.2 Create DynamoDB Table for State Locking (Recommended)
+
+State locking prevents multiple Terraform runs from modifying state simultaneously.
+
+**Option A: Using AWS Console**
+
+1. Navigate to **DynamoDB** → **Create table**
+2. Table settings:
+   - **Table name**: `gift-list-terraform-lock`
+   - **Partition key**: `LockID` (type: String)
+3. **Table settings**: Leave defaults (On-demand capacity)
+4. Click **Create table**
+
+**Option B: Using AWS CLI**
+
+```bash
+aws dynamodb create-table \
+  --table-name gift-list-terraform-lock \
+  --attribute-definitions AttributeName=LockID,AttributeType=S \
+  --key-schema AttributeName=LockID,KeyType=HASH \
+  --billing-mode PAY_PER_REQUEST \
+  --region us-east-1 \
+  --profile gift-list
+
+echo "DynamoDB table created: gift-list-terraform-lock"
+```
+
+#### 5.0.3 Configure Terraform Backend
+
+Create or update the backend configuration in your Terraform code.
+
+**Create `terraform/backend.tf`:**
+
+```hcl
+terraform {
+  backend "s3" {
+    bucket         = "gift-list-terraform-state-<your-unique-id>"  # Replace with your bucket name
+    key            = "terraform.tfstate"
+    region         = "us-east-1"
+    encrypt        = true
+    dynamodb_table = "gift-list-terraform-lock"  # Optional but recommended
+  }
+}
+```
+
+**Important Notes:**
+- Replace `<your-unique-id>` with your actual bucket name from step 5.0.1
+- The `key` parameter defines the path within the bucket (you can use different keys for dev/prod)
+- Set `encrypt = true` to ensure state is encrypted in S3
+- The `dynamodb_table` enables state locking
+
+**Alternative: Environment-Specific State Files**
+
+For separate dev/prod state files, you can use workspace-specific keys:
+
+```hcl
+terraform {
+  backend "s3" {
+    bucket         = "gift-list-terraform-state-<your-unique-id>"
+    key            = "envs/${terraform.workspace}/terraform.tfstate"
+    region         = "us-east-1"
+    encrypt        = true
+    dynamodb_table = "gift-list-terraform-lock"
+  }
+}
+```
+
+Then use Terraform workspaces:
+```bash
+terraform workspace new dev
+terraform workspace new prod
+terraform workspace select dev  # or prod
+```
+
+#### 5.0.4 Verify IAM Permissions
+
+Ensure your IAM user (`gift-list-ci`) has permissions for S3 and DynamoDB operations.
+
+**Required S3 Permissions:**
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "s3:ListBucket",
+        "s3:GetObject",
+        "s3:PutObject",
+        "s3:DeleteObject"
+      ],
+      "Resource": [
+        "arn:aws:s3:::gift-list-terraform-state-*",
+        "arn:aws:s3:::gift-list-terraform-state-*/*"
+      ]
+    }
+  ]
+}
+```
+
+**Required DynamoDB Permissions (if using state locking):**
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "dynamodb:GetItem",
+        "dynamodb:PutItem",
+        "dynamodb:DeleteItem"
+      ],
+      "Resource": "arn:aws:dynamodb:us-east-1:*:table/gift-list-terraform-lock"
+    }
+  ]
+}
+```
+
+**If you used managed policies in Step 2.2, these permissions should already be included.**
+
+#### 5.0.5 Migrate Existing Local State (If Applicable)
+
+If you've already run Terraform locally and have a `terraform.tfstate` file:
+
+```bash
+cd terraform
+
+# Initialize with the new backend configuration
+terraform init -migrate-state
+
+# Terraform will ask: "Do you want to copy existing state to the new backend?"
+# Answer: yes
+
+# Verify state is in S3
+aws s3 ls s3://gift-list-terraform-state-<your-unique-id>/ --profile gift-list
+
+# After verification, you can safely delete local state files
+# rm terraform.tfstate
+# rm terraform.tfstate.backup
+```
+
+**Note:** If this is a fresh setup with no existing state, you can skip this step.
+
+---
+
 ### 5.1 Initialize Terraform
 
 ```bash
 cd terraform
 terraform init
+```
+
+If you configured the S3 backend (step 5.0), Terraform will initialize the remote backend and confirm:
+```
+Initializing the backend...
+
+Successfully configured the backend "s3"!
 ```
 
 ### 5.2 Deploy Development Environment
@@ -453,6 +674,30 @@ git push origin prod
 - Run `aws configure --profile gift-list` again
 - Verify access keys are correct
 
+**Error: "Error loading state: AccessDenied" or "Failed to get existing workspaces"**
+- S3 bucket permissions issue
+- Verify IAM user has S3 permissions (see Step 5.0.4)
+- Check bucket name is correct in `backend.tf`
+- Verify bucket exists: `aws s3 ls s3://your-bucket-name --profile gift-list`
+
+**Error: "Error acquiring the state lock"**
+- Another Terraform process is running
+- Wait for other process to complete
+- If stuck, you can force-unlock (use with caution):
+  ```bash
+  terraform force-unlock <lock-id>
+  ```
+- Verify DynamoDB table exists and has correct permissions
+
+**Error: "Failed to save state: NoSuchBucket"**
+- S3 bucket doesn't exist
+- Create bucket following Step 5.0.1
+- Verify bucket name in `backend.tf` matches actual bucket name
+
+**Error: "Error configuring the backend: region: required field is not set"**
+- Missing `region` parameter in `backend.tf`
+- Add `region = "us-east-1"` to your S3 backend configuration
+
 ### Netlify Deployment Errors
 
 **Error: "Build failed" or "Command not found"**
@@ -617,5 +862,6 @@ terraform apply -var-file="environments/prod.tfvars"
 ---
 
 **Last Updated**: 2026-01-06
+**Latest Change**: Added comprehensive S3 backend configuration guide (Step 5.0)
 
 For questions or issues, please refer to the [main README](README.md) or [CLAUDE.md](CLAUDE.md) documentation.
