@@ -8,12 +8,12 @@ terraform {
     }
   }
 
-  # backend "s3" {
-  #   # Configure this for your environment
-  #   # bucket = "your-terraform-state-bucket"
-  #   # key    = "gift-list/terraform.tfstate"
-  #   # region = "us-east-1"
-  # }
+  backend "s3" {
+    bucket  = "gift-list-terraform-state-348343647471"
+    key     = "gift-list/terraform.tfstate"
+    region  = "us-east-1"
+    encrypt = true
+  }
 }
 
 provider "aws" {
