@@ -96,6 +96,21 @@ export interface ReorderGiftRequest {
   sortOrder: number;
 }
 
+// Public (Gifter) Types
+export interface PublicList {
+  id: string;
+  title: string;
+  hideClaimedGifts: boolean;
+}
+
+export interface PublicGift {
+  id: string;
+  title: string;
+  description: string;
+  url?: string;
+  status: 'available' | 'claimed';
+}
+
 // Error Types
 export enum ErrorCode {
   VALIDATION_ERROR = 'VALIDATION_ERROR',

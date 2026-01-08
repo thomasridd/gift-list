@@ -55,3 +55,6 @@ backend/function.zip
 # Temporary files
 tmp/
 temp/
+
+# Local Netlify folder
+.netlify

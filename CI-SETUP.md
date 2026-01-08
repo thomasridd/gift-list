@@ -420,6 +420,7 @@ Successfully configured the backend "s3"!
 
 ```bash
 # Review the plan
+export AWS_PROFILE=gift-list
 terraform plan -var-file="environments/dev.tfvars"
 
 # Apply (type 'yes' when prompted)
@@ -563,6 +564,7 @@ terraform output cognito_user_pool_id
 ```bash
 # Set variables
 USER_POOL_ID="<your-user-pool-id>"
+USER_POOL_REGION="us-east-1"
 USER_EMAIL="admin@example.com"
 TEMP_PASSWORD="TempPass123!"
 
@@ -576,6 +578,7 @@ aws cognito-idp admin-create-user \
   --temporary-password $TEMP_PASSWORD \
   --message-action SUPPRESS \
   --profile gift-list
+  --region $USER_POOL_REGION
 
 echo "User created:"
 echo "Email: $USER_EMAIL"
