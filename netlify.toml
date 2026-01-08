@@ -4,15 +4,16 @@
 [build]
   base = "frontend"
   command = "npm install && npm run build"
-  publish = "frontend/dist"
+  publish = "/dist"
 
 [build.environment]
   NODE_VERSION = "20"
 
 # Production deployment (prod branch)
 [context.production]
+  base = "frontend"
   command = "npm install && npm run build"
-  publish = "frontend/dist"
+  publish = "/dist"
 
 [context.production.environment]
   NODE_VERSION = "20"
@@ -20,8 +21,9 @@
 
 # Development deployment (dev branch - default)
 [context.dev]
+  base = "frontend"
   command = "npm install && npm run build"
-  publish = "frontend/dist"
+  publish = "/dist"
 
 [context.dev.environment]
   NODE_VERSION = "20"
@@ -29,13 +31,15 @@
 
 # Deploy previews for pull requests
 [context.deploy-preview]
+  base = "frontend"
   command = "npm install && npm run build"
-  publish = "frontend/dist"
+  publish = "/dist"
 
 # Branch deploys (for feature branches)
 [context.branch-deploy]
+  base = "frontend"
   command = "npm install && npm run build"
-  publish = "frontend/dist"
+  publish = "/dist"
 
 # Redirect rules
 [[redirects]]
