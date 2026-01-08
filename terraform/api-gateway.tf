@@ -163,22 +163,23 @@ resource "aws_apigatewayv2_stage" "default" {
   name        = "$default"
   auto_deploy = true
 
-  access_log_settings {
-    destination_arn = aws_cloudwatch_log_group.api_gateway_logs.arn
-    format = jsonencode({
-      requestId      = "$context.requestId"
-      ip             = "$context.identity.sourceIp"
-      requestTime    = "$context.requestTime"
-      httpMethod     = "$context.httpMethod"
-      routeKey       = "$context.routeKey"
-      status         = "$context.status"
-      protocol       = "$context.protocol"
-      responseLength = "$context.responseLength"
-    })
-  }
+  # Temporarily disabled - requires CloudWatch Logs permissions
+  # access_log_settings {
+  #   destination_arn = aws_cloudwatch_log_group.api_gateway_logs.arn
+  #   format = jsonencode({
+  #     requestId      = "$context.requestId"
+  #     ip             = "$context.identity.sourceIp"
+  #     requestTime    = "$context.requestTime"
+  #     httpMethod     = "$context.httpMethod"
+  #     routeKey       = "$context.routeKey"
+  #     status         = "$context.status"
+  #     protocol       = "$context.protocol"
+  #     responseLength = "$context.responseLength"
+  #   })
+  # }
 }
 
-resource "aws_cloudwatch_log_group" "api_gateway_logs" {
-  name              = "/aws/apigateway/${var.project_name}-${var.environment}"
-  retention_in_days = var.environment == "prod" ? 90 : 7
-}
+# resource "aws_cloudwatch_log_group" "api_gateway_logs" {
+#   name              = "/aws/apigateway/${var.project_name}-${var.environment}"
+#   retention_in_days = var.environment == "prod" ? 90 : 7
+# }

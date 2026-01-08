@@ -13,19 +13,19 @@
 [context.production]
   command = "npm install && npm run build"
   publish = "frontend/dist"
-  environment = { ENVIRONMENT = "production" }
 
 [context.production.environment]
   NODE_VERSION = "20"
+  ENVIRONMENT = "production"
 
 # Development deployment (dev branch - default)
 [context.dev]
   command = "npm install && npm run build"
   publish = "frontend/dist"
-  environment = { ENVIRONMENT = "development" }
 
 [context.dev.environment]
   NODE_VERSION = "20"
+  ENVIRONMENT = "development"
 
 # Deploy previews for pull requests
 [context.deploy-preview]

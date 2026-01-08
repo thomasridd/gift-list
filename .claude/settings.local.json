@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install)",
+      "Bash(npm run build)",
+      "Bash(terraform output:*)",
+      "Bash(aws cognito-idp describe-user-pool:*)",
+      "Bash(terraform state list:*)",
+      "Bash(terraform state show:*)",
+      "Bash(aws cognito-idp list-user-pools:*)",
+      "Bash(terraform refresh:*)",
+      "Bash(aws sts get-caller-identity:*)",
+      "Bash(aws iam:*)",
+      "Bash(aws configure get:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
