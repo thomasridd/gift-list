@@ -10,9 +10,9 @@ terraform {
 
   backend "s3" {
     bucket  = "gift-list-terraform-state-348343647471"
-    key     = "gift-list/terraform.tfstate"
     region  = "us-east-1"
     encrypt = true
+    # key is provided via -backend-config during init
   }
 }
 

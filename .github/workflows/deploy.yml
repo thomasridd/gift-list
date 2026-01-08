@@ -48,7 +48,12 @@ jobs:
 
       - name: Terraform Init
         working-directory: ./terraform
-        run: terraform init
+        run: |
+          if [[ "${{ github.ref }}" == "refs/heads/prod" ]]; then
+            terraform init -backend-config="key=gift-list/prod/terraform.tfstate"
+          else
+            terraform init -backend-config="key=gift-list/dev/terraform.tfstate"
+          fi
 
       - name: Set Environment
         id: set-env
