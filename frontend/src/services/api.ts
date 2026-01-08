@@ -30,7 +30,12 @@ api.interceptors.request.use(async (config) => {
   try {
     const user = await getCurrentUser();
     if (user) {
-      const session = await user.getSession();
+      const session = await new Promise<any>((resolve, reject) => {
+        user.getSession((err: Error | null, session: any) => {
+          if (err) reject(err);
+          else resolve(session);
+        });
+      });
       const token = session.getIdToken().getJwtToken();
       config.headers.Authorization = `Bearer ${token}`;
     }

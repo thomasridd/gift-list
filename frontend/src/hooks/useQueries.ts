@@ -90,7 +90,7 @@ export const useCreateGift = () => {
 export const useUpdateGift = () => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ giftId, listId, request }: { giftId: string; listId: string; request: UpdateGiftRequest }) =>
+    mutationFn: ({ giftId, request }: { giftId: string; listId: string; request: UpdateGiftRequest }) =>
       giftsApi.update(giftId, request),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.gifts(variables.listId) });
@@ -101,7 +101,7 @@ export const useUpdateGift = () => {
 export const useDeleteGift = () => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ giftId, listId }: { giftId: string; listId: string }) =>
+    mutationFn: ({ giftId }: { giftId: string; listId: string }) =>
       giftsApi.delete(giftId),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.gifts(variables.listId) });
@@ -113,7 +113,7 @@ export const useDeleteGift = () => {
 export const useReorderGift = () => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ giftId, listId, request }: { giftId: string; listId: string; request: ReorderGiftRequest }) =>
+    mutationFn: ({ giftId, request }: { giftId: string; listId: string; request: ReorderGiftRequest }) =>
       giftsApi.reorder(giftId, request),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.gifts(variables.listId) });
@@ -124,7 +124,7 @@ export const useReorderGift = () => {
 export const useUnclaimGift = () => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ giftId, listId }: { giftId: string; listId: string }) =>
+    mutationFn: ({ giftId }: { giftId: string; listId: string }) =>
       giftsApi.unclaim(giftId),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.gifts(variables.listId) });
@@ -153,7 +153,7 @@ export const usePublicGifts = (shareCode: string) => {
 export const useClaimGift = () => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ giftId, shareCode, request }: { giftId: string; shareCode: string; request: ClaimGiftRequest }) =>
+    mutationFn: ({ giftId, request }: { giftId: string; shareCode: string; request: ClaimGiftRequest }) =>
       publicApi.claimGift(giftId, request),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.publicGifts(variables.shareCode) });
