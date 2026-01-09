@@ -399,11 +399,3 @@ This project follows a gitflow workflow:
    ```
 5. Submit a pull request to merge into `dev`
 6. After review and testing in dev, create a PR from `dev` to `prod` for production release
-
-## License
-
-MIT
-
-## Support
-
-For issues and questions, please open a GitHub issue.
