@@ -8,13 +8,26 @@ import {
 const userPoolId = import.meta.env.VITE_COGNITO_USER_POOL_ID;
 const clientId = import.meta.env.VITE_COGNITO_CLIENT_ID;
 
+// Validate that required environment variables are set
 if (!userPoolId || !clientId) {
-  console.warn('Cognito configuration missing. Set VITE_COGNITO_USER_POOL_ID and VITE_COGNITO_CLIENT_ID');
+  throw new Error(
+    'Cognito configuration missing. Please ensure VITE_COGNITO_USER_POOL_ID and VITE_COGNITO_CLIENT_ID ' +
+    'environment variables are set at build time. If you are deploying to Netlify, these variables must be ' +
+    'configured in the Netlify dashboard for your deployment context.'
+  );
+}
+
+// Validate that environment variables are not placeholder values
+if (clientId.includes('placeholder') || clientId.includes('xxxxxxxxx')) {
+  throw new Error(
+    'Invalid Cognito client ID detected. The VITE_COGNITO_CLIENT_ID environment variable contains a ' +
+    'placeholder value. Please configure it with the actual Cognito User Pool Client ID from your AWS setup.'
+  );
 }
 
 const poolData = {
-  UserPoolId: userPoolId || 'us-east-1_PLACEHOLDER',
-  ClientId: clientId || 'placeholder-client-id',
+  UserPoolId: userPoolId,
+  ClientId: clientId,
 };
 
 const userPool = new CognitoUserPool(poolData);
