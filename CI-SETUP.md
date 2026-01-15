@@ -496,7 +496,21 @@ Repeat the process above but:
 - Use values from `terraform-outputs-prod.txt`
 - Set context to **Branch: prod**
 
-### 6.3 Alternative: Use Netlify CLI
+### 6.3 Configure Branch Deploy Variables (Important!)
+
+For feature branches (like `claude/*` branches), you need to set environment variables that will be used for branch deploys:
+
+**Option A: Set for "All scopes" (Easiest)**
+1. When adding each variable, select **"All scopes"** instead of a specific branch
+2. This makes the dev environment variables available to all branch deploys
+
+**Option B: Set for "Branch deploys" context**
+1. When adding each variable, under **Scopes**, select **"Branch deploys"**
+2. This targets only non-production branch deployments
+
+**Important:** Without these variables configured, branch deploys will fail authentication with confusing error messages like "placeholder-client-id validation error".
+
+### 6.4 Alternative: Use Netlify CLI
 
 ```bash
 # Install Netlify CLI
@@ -749,6 +763,17 @@ git push origin prod
 - Verify `VITE_API_URL` is set correctly
 - Check API Gateway endpoint is accessible
 - Verify CORS settings in Lambda
+
+**Error: "1 validation error detected: Value 'placeholder-client-id' at 'clientId' failed to satisfy constraint"**
+- This means the frontend was built without proper Cognito environment variables
+- **For branch deploys**: Netlify needs environment variables configured for all branch contexts
+- **Solution**: Configure environment variables in Netlify dashboard:
+  1. Go to Site settings → Environment variables
+  2. For **each** required variable (`VITE_COGNITO_CLIENT_ID`, `VITE_COGNITO_USER_POOL_ID`, `VITE_API_URL`, `VITE_COGNITO_REGION`)
+  3. Set values for both `dev` and `prod` branch contexts
+  4. Additionally, set values for **"All scopes"** or **"Branch deploys"** to cover feature branches
+  5. Trigger a new deploy after configuring variables
+- **Note**: With the latest code changes, builds will now fail early with a clear error message if environment variables are missing, preventing this confusing error
 
 ### Getting Help
 
