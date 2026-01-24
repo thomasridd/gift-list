@@ -8,29 +8,37 @@ import {
 const userPoolId = import.meta.env.VITE_COGNITO_USER_POOL_ID;
 const clientId = import.meta.env.VITE_COGNITO_CLIENT_ID;
 
-// Validate that required environment variables are set
+// Lazy initialization: validate and create pool when first accessed
+let userPool: CognitoUserPool | null = null;
+let configError: string | null = null;
+
+// Check for configuration errors at module load time
 if (!userPoolId || !clientId) {
-  throw new Error(
+  configError =
     'Cognito configuration missing. Please ensure VITE_COGNITO_USER_POOL_ID and VITE_COGNITO_CLIENT_ID ' +
     'environment variables are set at build time. If you are deploying to Netlify, these variables must be ' +
-    'configured in the Netlify dashboard for your deployment context.'
-  );
-}
-
-// Validate that environment variables are not placeholder values
-if (clientId.includes('placeholder') || clientId.includes('xxxxxxxxx')) {
-  throw new Error(
+    'configured in the Netlify dashboard for your deployment context.';
+} else if (clientId.includes('placeholder') || clientId.includes('xxxxxxxxx')) {
+  configError =
     'Invalid Cognito client ID detected. The VITE_COGNITO_CLIENT_ID environment variable contains a ' +
-    'placeholder value. Please configure it with the actual Cognito User Pool Client ID from your AWS setup.'
-  );
+    'placeholder value. Please configure it with the actual Cognito User Pool Client ID from your AWS setup.';
 }
 
-const poolData = {
-  UserPoolId: userPoolId,
-  ClientId: clientId,
-};
+// Get or create the user pool, throwing error if misconfigured
+const getUserPool = (): CognitoUserPool => {
+  if (configError) {
+    throw new Error(configError);
+  }
 
-const userPool = new CognitoUserPool(poolData);
+  if (!userPool) {
+    userPool = new CognitoUserPool({
+      UserPoolId: userPoolId!,
+      ClientId: clientId!,
+    });
+  }
+
+  return userPool;
+};
 
 export interface AuthUser {
   username: string;
@@ -47,7 +55,7 @@ export const signIn = (username: string, password: string): Promise<CognitoUserS
 
     const cognitoUser = new CognitoUser({
       Username: username,
-      Pool: userPool,
+      Pool: getUserPool(),
     });
 
     cognitoUser.authenticateUser(authenticationDetails, {
@@ -62,7 +70,7 @@ export const signIn = (username: string, password: string): Promise<CognitoUserS
 };
 
 export const signOut = (): void => {
-  const cognitoUser = userPool.getCurrentUser();
+  const cognitoUser = getUserPool().getCurrentUser();
   if (cognitoUser) {
     cognitoUser.signOut();
   }
@@ -70,7 +78,7 @@ export const signOut = (): void => {
 
 export const getCurrentUser = (): Promise<CognitoUser | null> => {
   return new Promise((resolve) => {
-    const cognitoUser = userPool.getCurrentUser();
+    const cognitoUser = getUserPool().getCurrentUser();
 
     if (!cognitoUser) {
       resolve(null);
