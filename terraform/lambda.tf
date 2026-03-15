@@ -71,7 +71,7 @@ resource "aws_lambda_function" "api_handler" {
   environment {
     variables = {
       DYNAMODB_TABLE_NAME = aws_dynamodb_table.gift_lists.name
-      COGNITO_USER_POOL_ID = aws_cognito_user_pool.listers.id
+      GOOGLE_CLIENT_ID    = var.google_client_id
       CORS_ORIGIN         = var.cors_origin
     }
   }

@@ -21,3 +21,8 @@ variable "cors_origin" {
   type        = string
   default     = "*"
 }
+
+variable "google_client_id" {
+  description = "Google OAuth2 Client ID"
+  type        = string
+}

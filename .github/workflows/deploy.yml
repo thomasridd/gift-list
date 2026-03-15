@@ -16,8 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       api_url: ${{ steps.terraform-output.outputs.api_url }}
-      cognito_pool_id: ${{ steps.terraform-output.outputs.cognito_pool_id }}
-      cognito_client_id: ${{ steps.terraform-output.outputs.cognito_client_id }}
+      google_client_id: ${{ steps.terraform-output.outputs.google_client_id }}
       netlify_production: ${{ steps.set-env.outputs.NETLIFY_PRODUCTION }}
 
     steps:
@@ -68,7 +67,7 @@ jobs:
 
       - name: Terraform Plan
         working-directory: ./terraform
-        run: terraform plan -var-file="environments/${{ steps.set-env.outputs.ENV_FILE }}" -out=tfplan
+        run: terraform plan -var-file="environments/${{ steps.set-env.outputs.ENV_FILE }}" -var="google_client_id=${{ secrets.GOOGLE_CLIENT_ID }}" -out=tfplan
 
       - name: Terraform Apply
         working-directory: ./terraform
@@ -79,8 +78,7 @@ jobs:
         working-directory: ./terraform
         run: |
           echo "api_url=$(terraform output -raw api_gateway_url)" >> $GITHUB_OUTPUT
-          echo "cognito_pool_id=$(terraform output -raw cognito_user_pool_id)" >> $GITHUB_OUTPUT
-          echo "cognito_client_id=$(terraform output -raw cognito_user_pool_client_id)" >> $GITHUB_OUTPUT
+          echo "google_client_id=$(terraform output -raw google_client_id)" >> $GITHUB_OUTPUT
 
   deploy-frontend:
     name: Deploy Frontend
@@ -103,9 +101,7 @@ jobs:
         working-directory: ./frontend
         env:
           VITE_API_URL: ${{ needs.deploy-infrastructure.outputs.api_url }}
-          VITE_COGNITO_USER_POOL_ID: ${{ needs.deploy-infrastructure.outputs.cognito_pool_id }}
-          VITE_COGNITO_CLIENT_ID: ${{ needs.deploy-infrastructure.outputs.cognito_client_id }}
-          VITE_COGNITO_REGION: ${{ env.AWS_REGION }}
+          VITE_GOOGLE_CLIENT_ID: ${{ needs.deploy-infrastructure.outputs.google_client_id }}
         run: npm run build
 
       - name: Deploy to Netlify

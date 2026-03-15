@@ -3,14 +3,9 @@ output "dynamodb_table_name" {
   value       = aws_dynamodb_table.gift_lists.name
 }
 
-output "cognito_user_pool_id" {
-  description = "ID of the Cognito User Pool"
-  value       = aws_cognito_user_pool.listers.id
-}
-
-output "cognito_user_pool_client_id" {
-  description = "ID of the Cognito User Pool Client"
-  value       = aws_cognito_user_pool_client.web.id
+output "google_client_id" {
+  description = "Google OAuth2 Client ID"
+  value       = var.google_client_id
 }
 
 output "api_gateway_url" {

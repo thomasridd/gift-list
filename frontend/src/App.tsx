@@ -1,11 +1,14 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { GoogleOAuthProvider } from '@react-oauth/google';
 import { Toaster } from 'react-hot-toast';
 import { Login } from './components/auth/Login';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { Dashboard } from './components/lister/Dashboard';
 import { GiftManager } from './components/lister/GiftManager';
 import { PublicListView } from './components/gifter/PublicListView';
+
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -20,6 +23,7 @@ const queryClient = new QueryClient({
 
 function App() {
   return (
+    <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <Routes>
@@ -67,6 +71,7 @@ function App() {
         }}
       />
     </QueryClientProvider>
+    </GoogleOAuthProvider>
   );
 }
 

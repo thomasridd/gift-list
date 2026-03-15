@@ -14,7 +14,7 @@ import type {
   PublicGift,
   ErrorResponse
 } from '../types';
-import { getCurrentUser } from './auth';
+import { getStoredToken, isTokenExpired } from './auth';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -26,24 +26,10 @@ const api = axios.create({
 });
 
 // Request interceptor to add auth token
-api.interceptors.request.use(async (config) => {
-  try {
-    const user = await getCurrentUser();
-    if (user) {
-      const session = await new Promise<any>((resolve, reject) => {
-        user.getSession((err: Error | null, session: any) => {
-          if (err) {
-            reject(err);
-          } else {
-            resolve(session);
-          }
-        });
-      });
-      const token = session.getIdToken().getJwtToken();
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-  } catch (error) {
-    // No user logged in, continue without token
+api.interceptors.request.use((config) => {
+  const token = getStoredToken();
+  if (token && !isTokenExpired(token)) {
+    config.headers.Authorization = `Bearer ${token}`;
   }
   return config;
 });

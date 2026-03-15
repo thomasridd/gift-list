@@ -10,15 +10,15 @@ resource "aws_apigatewayv2_api" "gift_api" {
   }
 }
 
-resource "aws_apigatewayv2_authorizer" "cognito" {
+resource "aws_apigatewayv2_authorizer" "google" {
   api_id           = aws_apigatewayv2_api.gift_api.id
   authorizer_type  = "JWT"
   identity_sources = ["$request.header.Authorization"]
-  name             = "cognito-authorizer"
+  name             = "google-authorizer"
 
   jwt_configuration {
-    audience = [aws_cognito_user_pool_client.web.id]
-    issuer   = "https://cognito-idp.${var.aws_region}.amazonaws.com/${aws_cognito_user_pool.listers.id}"
+    audience = [var.google_client_id]
+    issuer   = "https://accounts.google.com"
   }
 }
 
@@ -39,7 +39,7 @@ resource "aws_apigatewayv2_route" "lists" {
   target    = "integrations/${aws_apigatewayv2_integration.lambda.id}"
 
   authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+  authorizer_id      = aws_apigatewayv2_authorizer.google.id
 }
 
 resource "aws_apigatewayv2_route" "create_list" {
@@ -48,7 +48,7 @@ resource "aws_apigatewayv2_route" "create_list" {
   target    = "integrations/${aws_apigatewayv2_integration.lambda.id}"
 
   authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+  authorizer_id      = aws_apigatewayv2_authorizer.google.id
 }
 
 resource "aws_apigatewayv2_route" "get_list" {
@@ -57,7 +57,7 @@ resource "aws_apigatewayv2_route" "get_list" {
   target    = "integrations/${aws_apigatewayv2_integration.lambda.id}"
 
   authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+  authorizer_id      = aws_apigatewayv2_authorizer.google.id
 }
 
 resource "aws_apigatewayv2_route" "update_list" {
@@ -66,7 +66,7 @@ resource "aws_apigatewayv2_route" "update_list" {
   target    = "integrations/${aws_apigatewayv2_integration.lambda.id}"
 
   authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+  authorizer_id      = aws_apigatewayv2_authorizer.google.id
 }
 
 resource "aws_apigatewayv2_route" "delete_list" {
@@ -75,7 +75,7 @@ resource "aws_apigatewayv2_route" "delete_list" {
   target    = "integrations/${aws_apigatewayv2_integration.lambda.id}"
 
   authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+  authorizer_id      = aws_apigatewayv2_authorizer.google.id
 }
 
 resource "aws_apigatewayv2_route" "get_gifts" {
@@ -84,7 +84,7 @@ resource "aws_apigatewayv2_route" "get_gifts" {
   target    = "integrations/${aws_apigatewayv2_integration.lambda.id}"
 
   authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+  authorizer_id      = aws_apigatewayv2_authorizer.google.id
 }
 
 resource "aws_apigatewayv2_route" "create_gift" {
@@ -93,7 +93,7 @@ resource "aws_apigatewayv2_route" "create_gift" {
   target    = "integrations/${aws_apigatewayv2_integration.lambda.id}"
 
   authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+  authorizer_id      = aws_apigatewayv2_authorizer.google.id
 }
 
 resource "aws_apigatewayv2_route" "update_gift" {
@@ -102,7 +102,7 @@ resource "aws_apigatewayv2_route" "update_gift" {
   target    = "integrations/${aws_apigatewayv2_integration.lambda.id}"
 
   authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+  authorizer_id      = aws_apigatewayv2_authorizer.google.id
 }
 
 resource "aws_apigatewayv2_route" "delete_gift" {
@@ -111,7 +111,7 @@ resource "aws_apigatewayv2_route" "delete_gift" {
   target    = "integrations/${aws_apigatewayv2_integration.lambda.id}"
 
   authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+  authorizer_id      = aws_apigatewayv2_authorizer.google.id
 }
 
 resource "aws_apigatewayv2_route" "reorder_gift" {
@@ -120,7 +120,7 @@ resource "aws_apigatewayv2_route" "reorder_gift" {
   target    = "integrations/${aws_apigatewayv2_integration.lambda.id}"
 
   authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+  authorizer_id      = aws_apigatewayv2_authorizer.google.id
 }
 
 resource "aws_apigatewayv2_route" "unclaim_gift" {
@@ -129,7 +129,7 @@ resource "aws_apigatewayv2_route" "unclaim_gift" {
   target    = "integrations/${aws_apigatewayv2_integration.lambda.id}"
 
   authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+  authorizer_id      = aws_apigatewayv2_authorizer.google.id
 }
 
 # Public routes (no authentication)

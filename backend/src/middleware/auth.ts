@@ -4,7 +4,6 @@ import { ApiError, ErrorCode } from '../types';
 interface DecodedToken {
   sub: string;
   email?: string;
-  'cognito:username'?: string;
 }
 
 export const getUserIdFromEvent = (event: APIGatewayProxyEvent): string => {
