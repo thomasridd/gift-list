@@ -31,6 +31,10 @@ resource "aws_cognito_user_pool" "listers" {
   tags = {
     Name = "${var.project_name}-listers-${var.environment}"
   }
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "aws_cognito_user_pool_client" "web" {
@@ -53,4 +57,8 @@ resource "aws_cognito_user_pool_client" "web" {
   write_attributes = [
     "email"
   ]
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
