@@ -38,6 +38,18 @@ export interface AuthUser {
   sub?: string;
 }
 
+export class NewPasswordRequiredError extends Error {
+  cognitoUser: CognitoUser;
+  userAttributes: Record<string, string>;
+
+  constructor(cognitoUser: CognitoUser, userAttributes: Record<string, string>) {
+    super('New password required');
+    this.name = 'NewPasswordRequiredError';
+    this.cognitoUser = cognitoUser;
+    this.userAttributes = userAttributes;
+  }
+}
+
 export const signIn = (username: string, password: string): Promise<CognitoUserSession> => {
   return new Promise((resolve, reject) => {
     const authenticationDetails = new AuthenticationDetails({
@@ -51,6 +63,29 @@ export const signIn = (username: string, password: string): Promise<CognitoUserS
     });
 
     cognitoUser.authenticateUser(authenticationDetails, {
+      onSuccess: (session) => {
+        resolve(session);
+      },
+      onFailure: (err) => {
+        reject(err);
+      },
+      newPasswordRequired: (userAttributes) => {
+        // Remove non-settable attributes
+        delete userAttributes.email_verified;
+        delete userAttributes.phone_number_verified;
+        reject(new NewPasswordRequiredError(cognitoUser, userAttributes));
+      },
+    });
+  });
+};
+
+export const completeNewPassword = (
+  cognitoUser: CognitoUser,
+  newPassword: string,
+  userAttributes: Record<string, string>
+): Promise<CognitoUserSession> => {
+  return new Promise((resolve, reject) => {
+    cognitoUser.completeNewPasswordChallenge(newPassword, userAttributes, {
       onSuccess: (session) => {
         resolve(session);
       },
