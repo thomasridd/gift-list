@@ -38,6 +38,18 @@ export interface AuthUser {
   sub?: string;
 }
 
+export class NewPasswordRequiredError extends Error {
+  cognitoUser: CognitoUser;
+  userAttributes: Record<string, string>;
+
+  constructor(cognitoUser: CognitoUser, userAttributes: Record<string, string>) {
+    super('New password required');
+    this.name = 'NewPasswordRequiredError';
+    this.cognitoUser = cognitoUser;
+    this.userAttributes = userAttributes;
+  }
+}
+
 export const signIn = (username: string, password: string): Promise<CognitoUserSession> => {
   return new Promise((resolve, reject) => {
     const authenticationDetails = new AuthenticationDetails({
@@ -51,6 +63,37 @@ export const signIn = (username: string, password: string): Promise<CognitoUserS
     });
 
     cognitoUser.authenticateUser(authenticationDetails, {
+      onSuccess: (session) => {
+        resolve(session);
+      },
+      onFailure: (err) => {
+        reject(err);
+      },
+      newPasswordRequired: (_userAttributes, requiredAttributes) => {
+        // Only pass back attributes explicitly required by the user pool policy.
+        // Passing existing attributes (e.g. email) causes Cognito to reject
+        // with "Cannot modify an already provided email".
+        const attributesForChallenge: Record<string, string> = {};
+        if (requiredAttributes) {
+          requiredAttributes.forEach((key: string) => {
+            if (_userAttributes[key] !== undefined) {
+              attributesForChallenge[key] = _userAttributes[key];
+            }
+          });
+        }
+        reject(new NewPasswordRequiredError(cognitoUser, attributesForChallenge));
+      },
+    });
+  });
+};
+
+export const completeNewPassword = (
+  cognitoUser: CognitoUser,
+  newPassword: string,
+  userAttributes: Record<string, string>
+): Promise<CognitoUserSession> => {
+  return new Promise((resolve, reject) => {
+    cognitoUser.completeNewPasswordChallenge(newPassword, userAttributes, {
       onSuccess: (session) => {
         resolve(session);
       },
