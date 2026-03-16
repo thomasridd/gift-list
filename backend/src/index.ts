@@ -30,12 +30,16 @@ export const handler = async (
 ): Promise<APIGatewayProxyResult> => {
   console.log('Event:', JSON.stringify(event, null, 2));
 
+  // Support both v1 and v2 payload formats from API Gateway
+  const eventAny = event as any;
+  const httpMethod = event.httpMethod || eventAny.requestContext?.http?.method;
+  const resource = event.resource || eventAny.routeKey?.replace(/^[A-Z]+ /, '');
+  const path = event.path || eventAny.rawPath;
+
   // Handle CORS preflight
-  if (event.httpMethod === 'OPTIONS') {
+  if (httpMethod === 'OPTIONS') {
     return successResponse({});
   }
-
-  const { httpMethod, resource, path } = event;
 
   try {
     // Lister endpoints (authenticated)
