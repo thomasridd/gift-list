@@ -8,8 +8,10 @@ interface DecodedToken {
 }
 
 export const getUserIdFromEvent = (event: APIGatewayProxyEvent): string => {
-  // In API Gateway with Cognito authorizer, the claims are in requestContext.authorizer.claims
-  const claims = event.requestContext?.authorizer?.claims as DecodedToken | undefined;
+  // HTTP API v2 JWT authorizer puts claims at requestContext.authorizer.jwt.claims
+  // REST API v1 Cognito authorizer puts claims at requestContext.authorizer.claims
+  const authorizer = event.requestContext?.authorizer as any;
+  const claims = (authorizer?.jwt?.claims ?? authorizer?.claims) as DecodedToken | undefined;
 
   if (!claims?.sub) {
     throw new ApiError(ErrorCode.UNAUTHORIZED, 'Unauthorized', 401);
