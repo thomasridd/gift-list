@@ -69,11 +69,19 @@ export const signIn = (username: string, password: string): Promise<CognitoUserS
       onFailure: (err) => {
         reject(err);
       },
-      newPasswordRequired: (userAttributes) => {
-        // Remove non-settable attributes
-        delete userAttributes.email_verified;
-        delete userAttributes.phone_number_verified;
-        reject(new NewPasswordRequiredError(cognitoUser, userAttributes));
+      newPasswordRequired: (_userAttributes, requiredAttributes) => {
+        // Only pass back attributes explicitly required by the user pool policy.
+        // Passing existing attributes (e.g. email) causes Cognito to reject
+        // with "Cannot modify an already provided email".
+        const attributesForChallenge: Record<string, string> = {};
+        if (requiredAttributes) {
+          requiredAttributes.forEach((key: string) => {
+            if (_userAttributes[key] !== undefined) {
+              attributesForChallenge[key] = _userAttributes[key];
+            }
+          });
+        }
+        reject(new NewPasswordRequiredError(cognitoUser, attributesForChallenge));
       },
     });
   });
