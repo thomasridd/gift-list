@@ -43,7 +43,7 @@ api.interceptors.request.use(async (config) => {
       config.headers.Authorization = `Bearer ${token}`;
     }
   } catch (error) {
-    // No user logged in, continue without token
+    console.warn('Failed to get auth token for request:', error);
   }
   return config;
 });
